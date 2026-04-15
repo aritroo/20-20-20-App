@@ -42,13 +42,28 @@ const initialSession: SessionState = {
   lastTickTime: null,
 };
 
+let audioCtx: AudioContext | null = null;
+const initAudio = () => {
+  if (typeof window !== 'undefined') {
+    if (!audioCtx) {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextClass) {
+        audioCtx = new AudioContextClass();
+      }
+    }
+    if (audioCtx?.state === 'suspended') {
+      audioCtx.resume().catch(console.warn);
+    }
+  }
+};
+
 const SessionContext = createContext<SessionContextProps | undefined>(undefined);
 
 export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [settings, setSettings] = useLocalStorage<AppSettings>('20-20-20-settings', defaultSettings);
   const [stats, setStats] = useLocalStorage<Statistics>('20-20-20-stats', defaultStats);
   const [history, setHistory] = useLocalStorage<Checkpoint[]>('20-20-20-history', []);
-  
+
   const [session, setSession] = useState<SessionState>({
     ...initialSession,
     focusDurationMs: settings.focusTimeMinutes * 60 * 1000,
@@ -66,8 +81,45 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const playChime = () => {
     if (settings.soundEnabled) {
-      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'); // Smooth chime
-      audio.play().catch(e => console.warn('Audio play failed:', e));
+      try {
+        initAudio();
+        if (!audioCtx) return;
+
+        const now = audioCtx.currentTime;
+        // Ding-Dong doorbell pattern
+        const notes = [
+          { pitch: 784.00, start: now, duration: 1.2 },       // G5 (Higher note)
+          { pitch: 659.25, start: now + 0.5, duration: 1.8 }  // E5 (Lower note)
+        ];
+
+        notes.forEach(({ pitch, start, duration }) => {
+          const fundamental = audioCtx.createOscillator();
+          const overtone = audioCtx.createOscillator();
+          const gainNode = audioCtx.createGain();
+
+          fundamental.connect(gainNode);
+          overtone.connect(gainNode);
+          gainNode.connect(audioCtx.destination);
+
+          fundamental.type = 'sine';
+          fundamental.frequency.setValueAtTime(pitch, start);
+
+          overtone.type = 'sine';
+          overtone.frequency.setValueAtTime(pitch * 2.76, start); // subtle inharmonic overtone for bell character
+
+          // Bell envelope: instant hit, exponential decay
+          gainNode.gain.setValueAtTime(0, start);
+          gainNode.gain.linearRampToValueAtTime(1.0, start + 0.02); // sharp attack
+          gainNode.gain.exponentialRampToValueAtTime(0.001, start + duration); // long fade out
+
+          fundamental.start(start);
+          overtone.start(start);
+          fundamental.stop(start + duration);
+          overtone.stop(start + duration);
+        });
+      } catch (e) {
+        console.warn('Audio play failed:', e);
+      }
     }
   };
 
@@ -103,10 +155,10 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       interval = window.setInterval(() => {
         const now = Date.now();
         const remaining = Math.max(0, session.endTime! - now);
-        
+
         let delta = 0;
         if (session.lastTickTime) {
-           delta = now - session.lastTickTime;
+          delta = now - session.lastTickTime;
         }
 
         setSession(prev => ({
@@ -124,29 +176,29 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (settings.totalSessionDurationMinutes > 0 && sessionStartTime) {
           const totalLimitMs = settings.totalSessionDurationMinutes * 60 * 1000;
           if (now - sessionStartTime >= totalLimitMs) {
-             notifyComplete();
-             stopSession();
-             return;
+            notifyComplete();
+            stopSession();
+            return;
           }
         }
 
         if (remaining <= 0) {
           if (session.phase === 'focus') {
-             // Switch to break
-             notifyBreak();
-             setSession(prev => ({
-               ...prev,
-               phase: 'break',
-               endTime: Date.now() + prev.breakDurationMs,
-               remainingMs: prev.breakDurationMs
-             }));
+            // Switch to break
+            notifyBreak();
+            setSession(prev => ({
+              ...prev,
+              phase: 'break',
+              endTime: Date.now() + prev.breakDurationMs,
+              remainingMs: prev.breakDurationMs
+            }));
           } else if (session.phase === 'break') {
-             // Break finished automatically? 
-             // We wait for the user to confirm to maintain the checkpoint logic requested.
-             // If timer runs out for break, it just stays at 0 until they click ✅ Completed or ⏭ Skip
-             // But actually, it can automatically jump back if we want. Wait, the req says "Start visible 20-second break timer. After break is completed or skipped...".
-             // We'll keep it at 0 and wait for manual action for checkpoint.
-             // Or we just wait for them to click the buttons.
+            // Break finished automatically? 
+            // We wait for the user to confirm to maintain the checkpoint logic requested.
+            // If timer runs out for break, it just stays at 0 until they click ✅ Completed or ⏭ Skip
+            // But actually, it can automatically jump back if we want. Wait, the req says "Start visible 20-second break timer. After break is completed or skipped...".
+            // We'll keep it at 0 and wait for manual action for checkpoint.
+            // Or we just wait for them to click the buttons.
           }
         }
       }, 100); // 100ms for smooth progress bar update
@@ -157,8 +209,11 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const startSession = useCallback(() => {
     requestNotificationPermission();
+    if (settings.soundEnabled) {
+      initAudio();
+    }
     const focusDuration = settings.focusTimeMinutes * 60 * 1000;
-    
+
     setSessionStartTime(Date.now());
     setSession({
       isActive: true,
@@ -181,6 +236,9 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   const resumeSession = useCallback(() => {
+    if (settings.soundEnabled) {
+      initAudio();
+    }
     setSession(prev => ({
       ...prev,
       isActive: true,
