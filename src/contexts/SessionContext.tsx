@@ -83,9 +83,10 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (settings.soundEnabled) {
       try {
         initAudio();
-        if (!audioCtx) return;
+        const ctx = audioCtx;
+        if (!ctx) return;
 
-        const now = audioCtx.currentTime;
+        const now = ctx.currentTime;
         // Ding-Dong doorbell pattern
         const notes = [
           { pitch: 784.00, start: now, duration: 1.2 },       // G5 (Higher note)
@@ -93,13 +94,13 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         ];
 
         notes.forEach(({ pitch, start, duration }) => {
-          const fundamental = audioCtx.createOscillator();
-          const overtone = audioCtx.createOscillator();
-          const gainNode = audioCtx.createGain();
+          const fundamental = ctx.createOscillator();
+          const overtone = ctx.createOscillator();
+          const gainNode = ctx.createGain();
 
           fundamental.connect(gainNode);
           overtone.connect(gainNode);
-          gainNode.connect(audioCtx.destination);
+          gainNode.connect(ctx.destination);
 
           fundamental.type = 'sine';
           fundamental.frequency.setValueAtTime(pitch, start);
