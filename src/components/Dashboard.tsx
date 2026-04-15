@@ -15,7 +15,7 @@ export const Dashboard: React.FC = () => {
 
   const isBreak = session.phase === 'break';
   const displayMs = session.remainingMs;
-  
+
   const totalMs = isBreak ? session.breakDurationMs : session.focusDurationMs;
   const progress = 100 - (displayMs / totalMs) * 100;
 
@@ -23,8 +23,8 @@ export const Dashboard: React.FC = () => {
     <div className="flex flex-col items-center p-8 bg-[var(--surface-color)] rounded-3xl shadow-sm border border-[var(--text-primary)]/5">
       <div className="mb-8 text-center">
         <h2 className="text-xl font-medium text-[var(--text-primary)]/70 mb-1">
-          {session.phase === 'idle' ? 'Ready to focus?' : 
-           session.phase === 'focus' ? 'Focus Session Active' : 'Break Time!'}
+          {session.phase === 'idle' ? 'Ready to focus?' :
+            session.phase === 'focus' ? 'Focus Session Active' : 'Break Time!'}
         </h2>
         {session.isActive && session.phase === 'focus' && (
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--color-primary-50)] dark:bg-[var(--color-primary-900)] text-[var(--color-primary-600)] dark:text-[var(--color-primary-100)] text-sm font-medium animate-pulse">
